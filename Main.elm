@@ -1,11 +1,14 @@
 port module Main exposing (..)
 
+
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.App exposing (program)
 import List.Extra exposing (inits)
 import String exposing (toList, fromList)
+import Regex exposing (Regex, regex, contains)
 import Debug
+
 
 main =
   Html.App.program
@@ -24,22 +27,39 @@ type alias Model =
 type Msg = NoOp
 
 
+yas : String
+yas = """
+var ${1:name} = new Class({
+  initialize: function(${2:test}) {
+    ${3:content}
+    $4
+  }$1
+});
+"""
+
+
+regexPlaceholder : Regex
+regexPlaceholder =
+  regex "\\$\\{(\\d+)\\:(\\w+)\\}"
+
+
+findPlaceholder =
+  Regex.find Regex.All regexPlaceholder
+
+
 strInits =
   toList >> inits >> List.map fromList
+
 
 init : (Model, Cmd Msg)
 init =
   let
     name = "Class"
-    body = """
-var ${1:name} = new Class({
-  initialize: function($2) {
-    $0
-  }
-});
-"""
+    body = yas
     _ =
       Debug.log "test" <| strInits name
+    _ =
+      Debug.log "matched" <| toString <| List.map .submatches <| findPlaceholder yas
   in
     (Model name body "C", Cmd.none)
 

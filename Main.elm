@@ -4,9 +4,10 @@ port module Main exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.App exposing (program)
-import List.Extra exposing (inits, uniqueBy, last)
+import List.Extra exposing (inits, uniqueBy, last, (!!))
 import String exposing (toList, fromList)
 import Regex exposing (Regex, regex, contains)
+import Time
 import Debug
 
 
@@ -18,10 +19,13 @@ main =
     , subscriptions = subscriptions
     }
 
+
 type alias Model =
   { name : String
   , body : String
-  , curr : String
+  , curr : Maybe String
+  , idx  : Int
+  , frames : List String
   }
 
 type alias YasPlaceholder =
@@ -34,7 +38,10 @@ type alias YasPlaceholderExpand =
   , expand : List String
   }
 
-type Msg = NoOp
+
+type Msg
+  = NoOp
+  | Tick Time.Time
 
 
 yas : String
@@ -60,9 +67,8 @@ regexPlaceholderReplacer num =
 
 findPlaceholder =
   Regex.find Regex.All regexPlaceholder
-  -- List.map .submatches
 
-       
+
 
 numberForMatched : List (Maybe String) -> YasPlaceholder
 numberForMatched m =
@@ -86,20 +92,16 @@ replaceTpl ph acc =
       regexPlaceholderReplacer <| toString ph.yas.num
     tpl =
       Maybe.withDefault yas (last acc)
-    matchFx matcher =
-      matcher.match
-    --_ = Debug.log "acc" tpl
-    _ = Debug.log "test" <| fx "$4"
     fx ctx =
-      Regex.replace Regex.All re matchFx tpl
+      Regex.replace Regex.All re (\{ match } -> ctx) tpl
     list =
       case ph.expand of
-        [] -> fx tpl
-        _  -> String.join "" <| List.map fx ph.expand
+        [] -> (fx "") :: []
+        _  -> List.map fx ph.expand
   in
-    list :: acc
+    List.append acc list
 
-    
+
 expandPlaceholderContent : YasPlaceholder -> YasPlaceholderExpand
 expandPlaceholderContent ({ ctx } as ph) =
   case String.isEmpty ctx of
@@ -108,8 +110,6 @@ expandPlaceholderContent ({ ctx } as ph) =
     _ ->
       YasPlaceholderExpand ph []
 
-
-                
 
 strInits =
   toList >> inits >> List.map fromList >> List.filter (not << String.isEmpty)
@@ -120,11 +120,11 @@ init =
   let
     name = "Class"
     body = yas
-    _ =
+    f1 =
       Debug.log "test" <| strInits name
-    _ =
+    f2 =
       Debug.log "matched"
-        <| toString
+        --<| toString
         <| List.foldl replaceTpl []
         <| List.map expandPlaceholderContent
         <| List.reverse
@@ -133,20 +133,31 @@ init =
         <| List.map numberForMatched
         <| List.map .submatches
         <| findPlaceholder yas
+    frames = List.append f1 f2
+    idx = 0
   in
-    (Model name body "C", Cmd.none)
+    (Model name body (frames !! idx) idx frames, Cmd.none)
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    Tick _ ->
+      let
+        idx' = model.idx + 1
+      in
+        ( { model | curr = (model.frames !! idx'), idx = idx'}
+        , Cmd.none
+        )
     _ ->
       (model, Cmd.none)
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.none
+  --Sub.none
+  Sub.batch
+     [Time.every (Time.second / 8) Tick]
 
 {-
 view : Model -> Html Msg
@@ -161,17 +172,20 @@ view model =
 view : Model -> Html Msg
 view model =
   let
-    _ =
-      Debug.log "test"
-        <| (toList >> inits >> List.map fromList >> List.filter (not << String.isEmpty))
-        model.name
+    content =
+      case model.curr of
+        Just c ->
+          c
+        Nothing ->
+          ""
   in
     main' [ class "yas-container" ]
     [ section [ class "yas-video" ]
         [ header [ class "yas-video-top" ] [ text "Emacs Yasnippet" ]
         , section [ class "yas-video-middle" ]
-            [ pre [ class "yas-video-body" ] [ text model.body ]
+            [ pre [ class "yas-video-body" ] [ text content ]
             ]
         , footer [ class "yas-video-bottom" ] [ text "|>" ]
         ]
     ]
+

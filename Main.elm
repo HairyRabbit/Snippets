@@ -1,18 +1,18 @@
 port module Main exposing (..)
 
-
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.App exposing (program)
+import Html.App as App
 import List.Extra exposing (inits, uniqueBy, last, (!!))
 import String exposing (toList, fromList)
 import Regex exposing (Regex, regex, contains)
 import Time
 import Debug
 
+import Slider.Slider as Slider
 
 main =
-  Html.App.program
+  App.program
     { init = init
     , view = view
     , update = update
@@ -26,6 +26,7 @@ type alias Model =
   , curr : Maybe String
   , idx  : Int
   , frames : List String
+  , slider : Slider.Model
   }
 
 type alias YasPlaceholder =
@@ -42,6 +43,7 @@ type alias YasPlaceholderExpand =
 type Msg
   = NoOp
   | Tick Time.Time
+  | MsgSlider Slider.Msg
 
 
 yas : String
@@ -121,11 +123,12 @@ init =
     name = "Class"
     body = yas
     f1 =
-      Debug.log "test" <| strInits name
+      --Debug.log "test" <| strInits name
+      strInits name
     f2 =
-      Debug.log "matched"
+      --Debug.log "matched"
         --<| toString
-        <| List.foldl replaceTpl []
+        List.foldl replaceTpl []
         <| List.map expandPlaceholderContent
         <| List.reverse
         <| List.sortBy .num
@@ -135,8 +138,14 @@ init =
         <| findPlaceholder yas
     frames = List.append f1 f2
     idx = 0
+    (mSlider, fxSlider) =
+      Slider.init
   in
-    (Model name body (frames !! idx) idx frames, Cmd.none)
+    ( Model name body (frames !! idx) idx frames mSlider
+    , Cmd.batch
+        [ Cmd.map MsgSlider fxSlider
+        ]
+    )
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -149,15 +158,24 @@ update msg model =
         ( { model | curr = (model.frames !! idx'), idx = idx'}
         , Cmd.none
         )
+    MsgSlider msgSlider ->
+      let
+        (m, fx) =
+          Slider.update msgSlider model.slider
+      in
+        ( { model | slider = m }
+        , Cmd.map MsgSlider fx
+        )
     _ ->
       (model, Cmd.none)
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  --Sub.none
   Sub.batch
-     [Time.every (Time.second / 8) Tick]
+     [ Time.every (Time.second / 8) Tick
+     , Sub.map MsgSlider <| Slider.subscriptions model.slider
+     ]
 
 {-
 view : Model -> Html Msg
@@ -180,12 +198,15 @@ view model =
           ""
   in
     main' [ class "yas-container" ]
-    [ section [ class "yas-video" ]
+      {-
+      [ section [ class "yas-video" ]
         [ header [ class "yas-video-top" ] [ text "Emacs Yasnippet" ]
         , section [ class "yas-video-middle" ]
             [ pre [ class "yas-video-body" ] [ text content ]
             ]
         , footer [ class "yas-video-bottom" ] [ text "|>" ]
         ]
-    ]
-
+      , App.map MsgSlider <| Slider.view model.slider
+      ]
+      -}
+      [App.map MsgSlider <| Slider.view model.slider]
